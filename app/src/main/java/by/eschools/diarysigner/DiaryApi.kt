@@ -11,7 +11,7 @@ import java.time.ZoneId
 import java.util.Locale
 
 class DiaryApi(private val login: String, private val password: String) {
-    companion object { private const val BASE = "https://diary.e-schools.by/api/v1"; private val MINSK = ZoneId.of("Europe/Minsk"); private const val WEEK_MS = 604800000L }
+    companion object { private const val BASE = "https://diary.e-schools.by/api/v1"; private val MINSK = ZoneId.of("Europe/Minsk");  }
     private class ApiException(message: String, val code: Int) : IllegalStateException(message)
     private fun request(method: String, path: String, token: String? = null, body: JSONObject? = null): String {
         var last: Exception? = null
@@ -22,7 +22,7 @@ class DiaryApi(private val login: String, private val password: String) {
                     requestMethod = method; connectTimeout = 15000; readTimeout = 20000
                     setRequestProperty("Accept", "application/json, text/plain, */*"); setRequestProperty("Origin", "https://diary.e-schools.by"); setRequestProperty("Referer", "https://diary.e-schools.by/")
                     setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/130.0 Mobile Safari/537.36")
-                    if (token != null) setRequestProperty("Authorization", "Bearer $token")
+                    if (token != null) setRequestProperty("Authorization", token)
                     if (body != null || method == "POST") { doOutput = true; setRequestProperty("Content-Type", "application/json"); outputStream.use { if (body != null) it.write(body.toString().toByteArray(Charsets.UTF_8)) } }
                 }
                 val code = conn.responseCode; val stream = if (code in 200..299) conn.inputStream else conn.errorStream
@@ -45,7 +45,7 @@ class DiaryApi(private val login: String, private val password: String) {
         val token = auth.optString("auth_token"); if (token.isBlank() || token == "null") error("Не получен токен. Проверьте логин и пароль.")
         val me = JSONObject(request("GET", "/admin/auth/me", token)); val students = me.optJSONArray("students_for_parent") ?: JSONArray(); if (students.length() == 0) error("В аккаунте не найдены ученики.")
         val now = System.currentTimeMillis(); val weeks = JSONArray(request("GET", "/education/diary/time_activities/week_activities", token)); var week: JSONObject? = null
-        for (i in 0 until weeks.length()) { val w = weeks.optJSONObject(i) ?: continue; val start = w.optLong("start_ts", -1); val end = w.optLong("end_ts", -1); if (start <= now && now < start + WEEK_MS && end > start && (week == null || start > week!!.optLong("start_ts"))) week = w }
+        for (i in 0 until weeks.length()) { val w = weeks.optJSONObject(i) ?: continue; val start = w.optLong("start_ts", -1); val end = w.optLong("end_ts", -1); if (start <= now && now < end && end > start && (week == null || start > week!!.optLong("start_ts"))) week = w }
         val w = week ?: return "Сейчас нет активной учебной недели."; val weekId = w.optString("uuid"); if (weekId.isBlank()) error("Не найден идентификатор недели.")
         val monday = Instant.ofEpochMilli(w.optLong("start_ts")).atZone(MINSK); val sunday = monday.plusDays(6)
         val from = String.format(Locale.ROOT, "%02d.%02d.%04d", monday.dayOfMonth, monday.monthValue, monday.year); val to = String.format(Locale.ROOT, "%02d.%02d.%04d", sunday.dayOfMonth, sunday.monthValue, sunday.year)
